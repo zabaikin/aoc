@@ -1,0 +1,14 @@
+{
+  "name": "advent-of-code",
+  "version": "1.0.0",
+  "description": "Advent Of Code Solutions",
+  "scripts": {
+    "watch": "tsx watch 2023/day7.ts"
+  },
+  "author": "Pavlo Zabaikin",
+  "devDependencies": {
+    "@types/node": "^20.10.4",
+    "tsx": "^4.6.2",
+    "typescript": "^5.3.3"
+  }
+}
