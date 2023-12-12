@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Advent Of Code Solutions",
   "scripts": {
-    "watch": "tsx watch 2023/day7.ts"
+    "watch": "tsx watch 2023/day8.ts"
   },
   "author": "Pavlo Zabaikin",
   "devDependencies": {
