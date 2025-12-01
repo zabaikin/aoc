@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Telephone Dial Animation</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+            padding: 20px;
+            background: #111;
+            color: #eee;
+        }
+
+        canvas {
+            background: #181818;
+            border-radius: 50%;
+            margin-bottom: 20px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        button {
+            padding: 6px 12px;
+            border-radius: 999px;
+            border: none;
+            cursor: pointer;
+            background: #2b6cb0;
+            color: white;
+            font-weight: 500;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: default;
+        }
+
+        input[type="range"] {
+            width: 150px;
+        }
+
+        .stats {
+            margin-top: 8px;
+            font-size: 14px;
+        }
+
+        textarea {
+            width: 100%;
+            max-width: 600px;
+            height: 100px;
+            background: #111;
+            color: #eee;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 8px;
+            font-family: monospace;
+            margin-top: 20px;
+        }
+
+        .label {
+            font-size: 13px;
+            opacity: 0.7;
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="dial" width="1000" height="1000"></canvas>
+
+    <div class="controls">
+        <button id="playPause">Play</button>
+        <button id="reset">Reset</button>
+        <span class="label">Speed:</span>
+        <input id="speed" type="range" min="10" max="300" value="80" />
+        <span id="stepInfo"></span>
+    </div>
+
+    <div class="stats">
+        <div>part1 (pointer == 0 after full instruction): <span id="part1">0</span></div>
+        <div>part2 (pointer == 0 during any step): <span id="part2">0</span></div>
+        <div>Current pointer: <span id="currentPointer">50</span></div>
+    </div>
+
+    <div style="margin-top: 16px; max-width: 650px;">
+        <div class="label">Input (one instruction per line, e.g. "L23", "R12"):</div>
+        <textarea id="inputArea">L68
+L30
+R48
+L5
+R60
+L55
+L1
+L99
+R14
+L82
+</textarea>
+        <button id="applyInput" style="margin-top: 8px;">Apply Input &amp; Restart</button>
+    </div>
+
+    <script>
+        // ---- Simulation logic (adapted from your day1 function, but step-by-step) ----
+
+        function buildStepsFromInput(input) {
+            const parsed = input.split("\n").map(s => s.trim()).filter(Boolean);
+
+            let pointer = 50;
+            let counter = 0;
+            let counter2 = 0;
+
+            // We record each step for animation
+            const steps = [];
+            steps.push({ pointer, counter, counter2, instrIndex: -1, instrStep: 0 });
+
+            parsed.forEach((d, idx) => {
+                const n = Number(d.slice(1));
+                const isRight = d.startsWith("R");
+
+                for (let i = 0; i < n; i++) {
+                    pointer = isRight ? pointer + 1 : pointer - 1;
+
+                    // wrap pointer to [0, 99]
+                    if (pointer < 0 || pointer > 99) {
+                        pointer = ((pointer % 100) + 100) % 100;
+                    }
+
+                    if (pointer === 0) counter2++;
+
+                    steps.push({
+                        pointer,
+                        counter,
+                        counter2,
+                        instrIndex: idx,
+                        instrStep: i + 1,
+                    });
+                }
+
+                if (pointer === 0) counter++;
+            });
+
+            return { steps, finalCounters: { part1: counter, part2: counter2 } };
+        }
+
+        // ---- Drawing logic ----
+
+        const canvas = document.getElementById("dial");
+        const ctx = canvas.getContext("2d");
+        const width = canvas.width;
+        const height = canvas.height;
+        const cx = width / 2;
+        const cy = height / 2;
+        const radius = 400;
+        const tickRadius = 380;
+
+        function drawDial(pointer) {
+            ctx.clearRect(0, 0, width, height);
+
+            // Outer circle
+            ctx.beginPath();
+            ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+            ctx.fillStyle = "#101010";
+            ctx.fill();
+            ctx.lineWidth = 12;
+            ctx.strokeStyle = "#135fe2";
+            ctx.stroke();
+
+            // Numbers + ticks
+            ctx.save();
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.font = "11px system-ui, sans-serif";
+
+            for (let i = 0; i < 100; i++) {
+                const angle = (i / 100) * Math.PI * 2 - Math.PI / 2;
+
+                const isZero = i === 0;
+                const isPointer = i === pointer;
+
+                const tickX1 = cx + (tickRadius - 8) * Math.cos(angle);
+                const tickY1 = cy + (tickRadius - 8) * Math.sin(angle);
+                const tickX2 = cx + tickRadius * Math.cos(angle);
+                const tickY2 = cy + tickRadius * Math.sin(angle);
+
+                ctx.beginPath();
+                ctx.moveTo(tickX1, tickY1);
+                ctx.lineTo(tickX2, tickY2);
+                ctx.lineWidth = isZero ? 3 : 1;
+                ctx.strokeStyle = isZero ? "#45f50a" : "#555";
+                ctx.stroke();
+
+                const textRadius = tickRadius - 20;
+                const textX = cx + textRadius * Math.cos(angle);
+                const textY = cy + textRadius * Math.sin(angle);
+
+                if (isPointer) {
+                    ctx.fillStyle = "#f50a0a";
+                    ctx.font = "bold 20px system-ui, sans-serif";
+                } else if (isZero) {
+                    ctx.fillStyle = "#45f50a";
+                    ctx.font = "bold 18px system-ui, sans-serif";
+                } else {
+                    ctx.fillStyle = "#ddd";
+                    ctx.font = "14px system-ui, sans-serif";
+                }
+
+                ctx.fillText(i.toString(), textX, textY);
+            }
+
+            ctx.restore();
+
+            // Pointer indicator (a triangle pointing to current number)
+            const pointerAngle = (pointer / 100) * Math.PI * 2 - Math.PI / 2;
+            const pointerOuter = radius + 5;
+            const px = cx + pointerOuter * Math.cos(pointerAngle);
+            const py = cy + pointerOuter * Math.sin(pointerAngle);
+
+            const sideAngleOffset = 0.12;
+            const pLeftX =
+                cx + (radius - 15) * Math.cos(pointerAngle - sideAngleOffset);
+            const pLeftY =
+                cy + (radius - 15) * Math.sin(pointerAngle - sideAngleOffset);
+            const pRightX =
+                cx + (radius - 15) * Math.cos(pointerAngle + sideAngleOffset);
+            const pRightY =
+                cy + (radius - 15) * Math.sin(pointerAngle + sideAngleOffset);
+
+            ctx.beginPath();
+            ctx.moveTo(px, py);
+            ctx.lineTo(pLeftX, pLeftY);
+            ctx.lineTo(pRightX, pRightY);
+            ctx.closePath();
+            ctx.fillStyle = "#f50a0a";
+            ctx.fill();
+
+            // Inner circle
+            ctx.beginPath();
+            ctx.arc(cx, cy, 70, 0, Math.PI * 2);
+            ctx.fillStyle = "#1a1a1a";
+            ctx.fill();
+
+            ctx.fillStyle = "#fff";
+            ctx.font = "16px system-ui, sans-serif";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText("Dial", cx, cy);
+        }
+
+        // ---- Animation control ----
+
+        const playPauseBtn = document.getElementById("playPause");
+        const resetBtn = document.getElementById("reset");
+        const speedSlider = document.getElementById("speed");
+        const stepInfo = document.getElementById("stepInfo");
+        const part1Span = document.getElementById("part1");
+        const part2Span = document.getElementById("part2");
+        const currentPointerSpan = document.getElementById("currentPointer");
+        const inputArea = document.getElementById("inputArea");
+        const applyInputBtn = document.getElementById("applyInput");
+
+        let steps = [];
+        let finalCounters = { part1: 0, part2: 0 };
+        let frame = 0;
+        let playing = false;
+        let timer = null;
+
+        function updateStats() {
+            if (!steps.length) return;
+            const s = steps[frame];
+            currentPointerSpan.textContent = String(s.pointer);
+            part1Span.textContent = String(s.counter);
+            part2Span.textContent = String(s.counter2);
+
+            if (s.instrIndex === -1) {
+                stepInfo.textContent = "Initial position";
+            } else {
+                stepInfo.textContent = `Instruction ${s.instrIndex + 1}, step ${s.instrStep
+                    }`;
+            }
+        }
+
+        function drawFrame() {
+            const pointer = steps.length ? steps[frame].pointer : 50;
+            drawDial(pointer);
+            updateStats();
+        }
+
+        function stopAnimation() {
+            playing = false;
+            playPauseBtn.textContent = "Play";
+            if (timer) {
+                clearInterval(timer);
+                timer = null;
+            }
+        }
+
+        function startAnimation() {
+            if (!steps.length) return;
+            playing = true;
+            playPauseBtn.textContent = "Pause";
+
+            if (timer) clearInterval(timer);
+            const speed = Number(speedSlider.value);
+            timer = setInterval(() => {
+                frame++;
+                if (frame >= steps.length) {
+                    frame = steps.length - 1;
+                    stopAnimation();
+                    // show final counters
+                    part1Span.textContent = String(finalCounters.part1);
+                    part2Span.textContent = String(finalCounters.part2);
+                    updateStats();
+                    return;
+                }
+                drawFrame();
+            }, speed);
+        }
+
+        function resetSimulation() {
+            frame = 0;
+            stopAnimation();
+            drawFrame();
+        }
+
+        function rebuildFromInput() {
+            const text = inputArea.value;
+            const sim = buildStepsFromInput(text);
+            steps = sim.steps;
+            finalCounters = sim.finalCounters;
+            frame = 0;
+            drawFrame();
+        }
+
+        playPauseBtn.addEventListener("click", () => {
+            if (playing) {
+                stopAnimation();
+            } else {
+                startAnimation();
+            }
+        });
+
+        resetBtn.addEventListener("click", () => {
+            resetSimulation();
+        });
+
+        speedSlider.addEventListener("input", () => {
+            if (playing) {
+                // restart with new speed
+                startAnimation();
+            }
+        });
+
+        applyInputBtn.addEventListener("click", () => {
+            rebuildFromInput();
+            resetSimulation();
+        });
+
+        // initial setup
+        rebuildFromInput();
+        drawFrame();
+    </script>
+</body>
+
+</html>
